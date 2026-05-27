@@ -1,11 +1,11 @@
 #[derive(Debug, Default, Clone)]
 pub struct TopHeadlinesParams {
-    pub country: Option<String>,
-    pub category: Option<String>,
-    pub sources: Option<String>,
-    pub q: Option<String>,
-    pub page_size: Option<u32>,
-    pub page: Option<u32>,
+    pub(crate) country: Option<String>,
+    pub(crate) category: Option<String>,
+    pub(crate) sources: Option<String>,
+    pub(crate) q: Option<String>,
+    pub(crate) page_size: Option<u32>,
+    pub(crate) page: Option<u32>,
 }
 
 impl TopHeadlinesParams {
@@ -46,16 +46,16 @@ impl TopHeadlinesParams {
 
 #[derive(Debug, Clone, Default)]
 pub struct EverythingParams {
-    pub q: Option<String>,
-    pub q_in_title: Option<String>,
-    pub sources: Option<String>,
-    pub domains: Option<String>,
-    pub from: Option<String>,
-    pub to: Option<String>,
-    pub language: Option<String>,
-    pub sort_by: Option<String>,
-    pub page_size: Option<u32>,
-    pub page: Option<u32>,
+    pub(crate) q: Option<String>,
+    pub(crate) q_in_title: Option<String>,
+    pub(crate) sources: Option<String>,
+    pub(crate) domains: Option<String>,
+    pub(crate) from: Option<String>,
+    pub(crate) to: Option<String>,
+    pub(crate) language: Option<String>,
+    pub(crate) sort_by: Option<String>,
+    pub(crate) page_size: Option<u32>,
+    pub(crate) page: Option<u32>,
 }
 
 impl EverythingParams {
@@ -116,9 +116,9 @@ impl EverythingParams {
 
 #[derive(Debug, Clone, Default)]
 pub struct SourceParams {
-    pub category: Option<String>,
-    pub language: Option<String>,
-    pub country: Option<String>,
+    pub(crate) category: Option<String>,
+    pub(crate) language: Option<String>,
+    pub(crate) country: Option<String>,
 }
 
 impl SourceParams {
