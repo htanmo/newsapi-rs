@@ -2,6 +2,8 @@ mod errors;
 mod models;
 mod params;
 
+use std::time::Duration;
+
 use reqwest::Client as HttpClient;
 
 pub use crate::{
@@ -10,15 +12,24 @@ pub use crate::{
     params::{EverythingParams, SourceParams, TopHeadlinesParams},
 };
 
-#[derive(Debug, Clone, Copy)]
-pub enum Version {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ApiVersion {
+    #[default]
     V2,
 }
 
-impl Version {
+impl ApiVersion {
     fn path(&self) -> &'static str {
         match self {
-            Version::V2 => "/v2",
+            ApiVersion::V2 => "/v2",
+        }
+    }
+}
+
+impl std::fmt::Display for ApiVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ApiVersion::V2 => write!(f, "v2"),
         }
     }
 }
@@ -28,21 +39,37 @@ pub struct NewsApiClient {
     api_key: String,
     base_url: String,
     http: HttpClient,
+    version: ApiVersion,
 }
 
 impl NewsApiClient {
     const BASE_URL: &str = "https://newsapi.org";
 
     pub fn new(api_key: impl Into<String>) -> Self {
-        Self::with_version(api_key, Version::V2)
+        Self::with_version(api_key, ApiVersion::default())
     }
 
-    pub fn with_version(api_key: impl Into<String>, version: Version) -> Self {
+    pub fn with_version(api_key: impl Into<String>, version: ApiVersion) -> Self {
+        let http = HttpClient::builder()
+            .timeout(Duration::from_secs(30))
+            .build()
+            .expect("Failed to build HTTP client");
+
         Self {
             api_key: api_key.into(),
             base_url: format!("{}{}", Self::BASE_URL, version.path()),
-            http: HttpClient::new(),
+            http: http,
+            version,
         }
+    }
+
+    pub fn set_version(&mut self, version: ApiVersion) {
+        self.version = version;
+        self.base_url = format!("{}{}", Self::BASE_URL, version.path());
+    }
+
+    pub fn version(&self) -> ApiVersion {
+        self.version
     }
 
     async fn handle_response(&self, response: reqwest::Response) -> Result<SuccessResponse> {
