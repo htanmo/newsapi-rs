@@ -1,9 +1,11 @@
+use std::time::Duration;
+
 use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum NewsApiError {
     #[error("HTTP request failed: {0}")]
-    Http(#[from] reqwest::Error),
+    Request(#[from] reqwest::Error),
 
     #[error("API returned error: {code} - {message}")]
     Api { code: String, message: String },
@@ -16,6 +18,9 @@ pub enum NewsApiError {
 
     #[error("Invalid Parameters: {0}")]
     InvalidParams(String),
+
+    #[error("Request timed out after {0:?}")]
+    Timeout(Duration),
 
     #[error("Json deserialization error: {0}")]
     Json(#[from] serde_json::Error),

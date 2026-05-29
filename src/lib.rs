@@ -34,42 +34,83 @@ impl std::fmt::Display for ApiVersion {
     }
 }
 
-#[derive(Debug)]
+const BASE_URL: &str = "https://newsapi.org";
+
+#[derive(Debug, Clone)]
 pub struct NewsApiClient {
     api_key: String,
-    base_url: String,
+    timeout: Duration,
     http: HttpClient,
     version: ApiVersion,
 }
 
 impl NewsApiClient {
-    const BASE_URL: &str = "https://newsapi.org";
-
     pub fn new(api_key: impl Into<String>) -> Self {
-        Self::with_version(api_key, ApiVersion::default())
+        Self::with_config(api_key, Duration::from_secs(30), ApiVersion::default())
     }
 
-    pub fn with_version(api_key: impl Into<String>, version: ApiVersion) -> Self {
+    pub fn with_config(api_key: impl Into<String>, timeout: Duration, version: ApiVersion) -> Self {
         let http = HttpClient::builder()
-            .timeout(Duration::from_secs(30))
+            .timeout(timeout)
             .build()
             .expect("Failed to build HTTP client");
 
         Self {
+            http,
             api_key: api_key.into(),
-            base_url: format!("{}{}", Self::BASE_URL, version.path()),
-            http: http,
             version,
+            timeout,
         }
+    }
+
+    pub fn with_timeout(api_key: impl Into<String>, timeout: Duration) -> Self {
+        Self::with_config(api_key, timeout, ApiVersion::V2)
+    }
+
+    pub fn with_version(api_key: impl Into<String>, version: ApiVersion) -> Self {
+        Self::with_config(api_key, Duration::from_secs(30), version)
     }
 
     pub fn set_version(&mut self, version: ApiVersion) {
         self.version = version;
-        self.base_url = format!("{}{}", Self::BASE_URL, version.path());
     }
 
     pub fn version(&self) -> ApiVersion {
         self.version
+    }
+
+    pub fn set_timeout(&mut self, timeout: Duration) -> Result<()> {
+        let new_http = HttpClient::builder()
+            .timeout(timeout)
+            .build()
+            .map_err(|e| NewsApiError::Request(e.into()))?;
+        self.http = new_http;
+        self.timeout = timeout;
+        Ok(())
+    }
+
+    fn build_url(&self, endpoint: &str) -> String {
+        format!("{}{}/{}", BASE_URL, self.version.path(), endpoint)
+    }
+
+    async fn execute_request(
+        &self,
+        request: reqwest::RequestBuilder,
+        timeout: Option<Duration>,
+    ) -> Result<reqwest::Response> {
+        let request = if let Some(t) = timeout {
+            request.timeout(t)
+        } else {
+            request
+        };
+        request.send().await.map_err(|e| {
+            if e.is_timeout() {
+                let actual_timeout = timeout.unwrap_or(self.timeout);
+                NewsApiError::Timeout(actual_timeout)
+            } else {
+                NewsApiError::Request(e)
+            }
+        })
     }
 
     async fn handle_response(&self, response: reqwest::Response) -> Result<SuccessResponse> {
@@ -96,6 +137,14 @@ impl NewsApiClient {
     }
 
     pub async fn top_headlines(&self, params: &TopHeadlinesParams) -> Result<SuccessResponse> {
+        self.top_headlines_with_timeout(params, None).await
+    }
+
+    pub async fn top_headlines_with_timeout(
+        &self,
+        params: &TopHeadlinesParams,
+        timeout: Option<Duration>,
+    ) -> Result<SuccessResponse> {
         let mut query = vec![("apiKey", self.api_key.to_string())];
 
         if let Some(country) = &params.country {
@@ -122,13 +171,21 @@ impl NewsApiClient {
             query.push(("pageSize", page_size.to_string()));
         }
 
-        let url = format!("{}/top-headlines", self.base_url);
-        let response = self.http.get(&url).query(&query).send().await?;
-
+        let url = self.build_url("/top-headlines");
+        let request = self.http.get(&url).query(&query);
+        let response = self.execute_request(request, timeout).await?;
         self.handle_response(response).await
     }
 
     pub async fn everything(&self, params: &EverythingParams) -> Result<SuccessResponse> {
+        self.everything_with_timeout(params, None).await
+    }
+
+    pub async fn everything_with_timeout(
+        &self,
+        params: &EverythingParams,
+        timeout: Option<Duration>,
+    ) -> Result<SuccessResponse> {
         let mut query = vec![("apiKey", self.api_key.to_string())];
         if let Some(q) = &params.q {
             query.push(("q", q.to_string()));
@@ -170,12 +227,21 @@ impl NewsApiClient {
             query.push(("pageSize", page_size.to_string()));
         }
 
-        let url = format!("{}/everything", self.base_url);
-        let response = self.http.get(&url).query(&query).send().await?;
+        let url = self.build_url("/everything");
+        let request = self.http.get(&url).query(&query);
+        let response = self.execute_request(request, timeout).await?;
         self.handle_response(response).await
     }
 
     pub async fn sources(&self, params: &SourceParams) -> Result<Vec<SourceDetail>> {
+        self.sources_with_timeout(params, None).await
+    }
+
+    pub async fn sources_with_timeout(
+        &self,
+        params: &SourceParams,
+        timeout: Option<Duration>,
+    ) -> Result<Vec<SourceDetail>> {
         let mut query = vec![("apiKey", self.api_key.to_string())];
 
         if let Some(category) = &params.category {
@@ -190,8 +256,9 @@ impl NewsApiClient {
             query.push(("country", country.to_string()));
         }
 
-        let url = format!("{}/sources", self.base_url);
-        let response = self.http.get(&url).query(&query).send().await?;
+        let url = self.build_url("/sources");
+        let request = self.http.get(&url).query(&query);
+        let response = self.execute_request(request, timeout).await?;
         let body = response.bytes().await?;
 
         let source_resp: SourcesResponse = serde_json::from_slice(&body)?;
